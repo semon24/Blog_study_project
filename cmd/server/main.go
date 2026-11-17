@@ -6,25 +6,65 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"time"
 
 	blogpb "blog-study-project/gen/blog/v1"
 	"blog-study-project/internal/blog"
-
+	"blog-study-project/internal/storage"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/redis/go-redis/v9"
 	httpSwagger "github.com/swaggo/http-swagger/v2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
 func main() {
+	dsn := "host=localhost port=5432 user=blog password=blog_password dbname=blog sslmode=disable"
+
+	db, err := storage.OpenPostgres(dsn)
+	if err != nil {
+		log.Fatalf("Ошибка подключения к PostgreSQL: %v", err)
+	}
+
+	sqlDB, err := db.DB()
+	if err != nil {
+		log.Fatalf("Ошибка получения подключения: %v", err)
+	}
+	defer sqlDB.Close()
+
+	if err := sqlDB.Ping(); err != nil {
+		log.Fatalf("PostgreSQL недоступен: %v", err)
+	}
+
+	log.Println("Подключение к PostgreSQL установлено")
+
+	redisClient := redis.NewClient(&redis.Options{
+		Addr: "localhost:6379",
+	})
+	defer redisClient.Close()
+
+	redisCtx, redisCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	err = redisClient.Ping(redisCtx).Err()
+	redisCancel()
+	if err != nil {
+		log.Fatalf("Подключение к Redis не удалось: %v", err)
+	}
+	log.Println("Подключение к Redis установлено")
+
 	listener, err := net.Listen("tcp", "localhost:8000")
 	if err != nil {
 		log.Fatal(err)
 	}
 
+	if err := db.AutoMigrate(&storage.Author{}, &storage.Post{}); err != nil {
+		log.Fatalf("Ошибка создания таблиц: %v", err)
+	}
+
+	log.Println("Таблицы базы данных готовы")
+
 	grpcServer := grpc.NewServer()
 
-	blogServer := &blog.Server{}
+	blogServer := &blog.Server{DB: db, Redis: redisClient}
 	blogpb.RegisterBlogServiceServer(grpcServer, blogServer)
 
 	go func() {
