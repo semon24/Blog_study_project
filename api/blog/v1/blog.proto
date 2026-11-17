@@ -1,0 +1,118 @@
+syntax = "proto3";
+
+package blog.v1;
+
+option go_package = "blog-study-project/gen/blog/v1;blogv1";
+
+import "google/protobuf/timestamp.proto";
+import "google/api/annotations.proto";
+import "protoc-gen-openapiv2/options/annotations.proto";
+
+option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
+    security_definitions: {
+        security: {
+            key: "UserID"
+            value: {
+                type: TYPE_API_KEY
+                in: IN_HEADER
+                name: "X-User-ID"
+                description: "Enter a positive user ID, for example 42."
+            }
+        }
+    }
+    security: {
+        security_requirement: {
+            key: "UserID"
+            value: {}
+        }
+    }
+};
+
+message Author {
+    int64 id = 1;
+    string nickname = 2;
+    string photo_url = 3;
+}
+
+message Post {
+    int64 id = 1;
+    Author author = 2;
+    string body = 3;
+    google.protobuf.Timestamp created_at = 4;
+    int64 likes_count = 5;
+    bool liked_by_me = 6;
+}
+
+message ListPostsRequest {
+    int64 limit = 1;
+    int64 offset = 2;
+}
+
+message ListPostsResponse {
+    repeated Post posts = 1;
+}
+
+message CreatePostRequest {
+    string body = 1;
+}
+
+message CreatePostResponse {
+    Post post = 1;
+}
+
+message DeletePostRequest {
+    int64 post_id = 1;
+}
+
+message DeletePostResponse {}
+
+message UpdatePostRequest {
+    int64 post_id = 1;
+    string body = 2;
+}
+
+message UpdatePostResponse {
+    Post post = 1;
+}
+
+message SetPostLikeRequest {
+  int64 post_id = 1;
+  bool liked = 2;
+}
+
+message SetPostLikeResponse {}
+
+service BlogService {
+    rpc ListPosts(ListPostsRequest) returns (ListPostsResponse) {
+        option (google.api.http) = {
+            get: "/api/list-posts"
+        };
+    }
+    rpc CreatePost(CreatePostRequest) returns (CreatePostResponse) {
+        option (google.api.http) = {
+            post: "/api/create-post"
+            body: "*"
+        };
+    }
+
+    rpc DeletePost(DeletePostRequest) returns (DeletePostResponse) {
+        option (google.api.http) = {
+            delete: "/api/delete-post/{post_id}"
+        };
+    }
+
+    rpc UpdatePost(UpdatePostRequest) returns (UpdatePostResponse) {
+        option (google.api.http) = {
+            patch: "/api/update-post/{post_id}"
+            body: "*"
+        };
+    }
+
+    rpc SetPostLike(SetPostLikeRequest) returns (SetPostLikeResponse) {
+        option (google.api.http) = {
+            put: "/api/set-post-like/{post_id}"
+            body: "*"
+        };
+    }
+}
+
