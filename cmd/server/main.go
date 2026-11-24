@@ -11,7 +11,9 @@ import (
 	blogpb "blog-study-project/gen/blog/v1"
 	"blog-study-project/internal/blog"
 	"blog-study-project/internal/storage"
+
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
 	httpSwagger "github.com/swaggo/http-swagger/v2"
 	"google.golang.org/grpc"
@@ -41,6 +43,7 @@ func main() {
 	redisClient := redis.NewClient(&redis.Options{
 		Addr: "localhost:6379",
 	})
+	redisClient.AddHook(storage.RedisLoggerHook{})
 	defer redisClient.Close()
 
 	redisCtx, redisCancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -62,7 +65,12 @@ func main() {
 
 	log.Println("Таблицы базы данных готовы")
 
-	grpcServer := grpc.NewServer()
+	grpcServer := grpc.NewServer(
+		grpc.ChainUnaryInterceptor(
+			blog.LoggingInterceptor,
+			blog.MetricsInterceptor,
+		),
+	)
 
 	blogServer := &blog.Server{DB: db, Redis: redisClient}
 	blogpb.RegisterBlogServiceServer(grpcServer, blogServer)
@@ -98,6 +106,7 @@ func main() {
 	}
 
 	mux := http.NewServeMux()
+	mux.Handle("/metrics", promhttp.Handler())
 	mux.HandleFunc("/openapi.json", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "api/openapi/blog.swagger.json")
 	})
@@ -108,6 +117,7 @@ func main() {
 
 	log.Println("HTTP Gateway запущен на http://localhost:8080")
 	log.Println("Swagger UI: http://localhost:8080/swagger/index.html")
+	log.Println("Metrics: http://localhost:8080/metrics")
 	err = http.ListenAndServe("localhost:8080", mux)
 	if err != nil {
 		log.Fatal(err)
