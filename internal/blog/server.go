@@ -101,6 +101,7 @@ func (s *Server) ListPosts(
 	likesCounts := make([]*redis.IntCmd, len(posts))
 	likedByMe := make([]*redis.BoolCmd, len(posts))
 	if len(posts) > 0 {
+		start := time.Now()
 		_, err := s.Redis.Pipelined(ctx, func(pipe redis.Pipeliner) error {
 			for i, post := range posts {
 				key := "post:" + strconv.FormatInt(post.ID, 10) + ":likes"
@@ -109,6 +110,7 @@ func (s *Server) ListPosts(
 			}
 			return nil
 		})
+		redisLikesDuration.Observe(time.Since(start).Seconds())
 		if err != nil {
 			return nil, status.Error(codes.Internal, "failed to load post likes")
 		}
