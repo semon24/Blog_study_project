@@ -5,6 +5,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -21,7 +22,7 @@ import (
 )
 
 func main() {
-	dsn := "host=localhost port=5432 user=blog password=blog_password dbname=blog sslmode=disable"
+	dsn := envOrDefault("POSTGRES_DSN", "host=localhost port=5432 user=blog password=blog_password dbname=blog sslmode=disable")
 
 	db, err := storage.OpenPostgres(dsn)
 	if err != nil {
@@ -41,7 +42,7 @@ func main() {
 	log.Println("Подключение к PostgreSQL установлено")
 
 	redisClient := redis.NewClient(&redis.Options{
-		Addr: "localhost:6379",
+		Addr: envOrDefault("REDIS_ADDR", "localhost:6379"),
 	})
 	redisClient.AddHook(storage.RedisLoggerHook{})
 	defer redisClient.Close()
@@ -54,7 +55,7 @@ func main() {
 	}
 	log.Println("Подключение к Redis установлено")
 
-	listener, err := net.Listen("tcp", "localhost:8000")
+	listener, err := net.Listen("tcp", ":8000")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -118,8 +119,15 @@ func main() {
 	log.Println("HTTP Gateway запущен на http://localhost:8080")
 	log.Println("Swagger UI: http://localhost:8080/swagger/index.html")
 	log.Println("Metrics: http://localhost:8080/metrics")
-	err = http.ListenAndServe("localhost:8080", mux)
+	err = http.ListenAndServe(":8080", mux)
 	if err != nil {
 		log.Fatal(err)
 	}
+}
+
+func envOrDefault(key, fallback string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return fallback
 }

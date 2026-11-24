@@ -1,15 +1,37 @@
 services:
+  blog:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      POSTGRES_DSN: "${POSTGRES_DSN:?Set POSTGRES_DSN in .env}"
+      REDIS_ADDR: "${REDIS_ADDR:?Set REDIS_ADDR in .env}"
+    ports:
+      - "127.0.0.1:${BLOG_GRPC_PORT:-8000}:8000"
+      - "127.0.0.1:${BLOG_HTTP_PORT:-8080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
   postgres:
-    image: postgres:latest
+    image: postgres:18
     container_name: postgres
     environment:
-      POSTGRES_USER: blog
-      POSTGRES_PASSWORD: blog_password
-      POSTGRES_DB: blog
+      POSTGRES_USER: "${POSTGRES_USER:?Set POSTGRES_USER in .env}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}"
+      POSTGRES_DB: "${POSTGRES_DB:?Set POSTGRES_DB in .env}"
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
 
   redis:
     image: redis:7
@@ -18,6 +40,12 @@ services:
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
 
 volumes:
   postgres_data:
